@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vandenberg Mental Rotation Test — Classic (Static)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+/* ================================================================
+   RESET & CSS VARIABLES
+   ================================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #3a3a3a;
+  --surface:   #484848;
+  --surface2:  #525252;
+  --surface3:  #5e5e5e;
+  --accent:    #ffffff;
+  --text:      #f0f0f0;
+  --muted:     #aaaaaa;
+  --correct:   #4caf50;
+  --wrong:     #ef5350;
+  --selected:  #e0e0e0;
+  --border:    #666666;
+  --radius:    8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+}
+
+html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text); overflow: hidden; }
+
+/* ================================================================
+   SCREENS — only one .active screen shown at a time
+   ================================================================ */
+.screen {
+  position: fixed; inset: 0;
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 24px; overflow-y: auto;
+}
+.screen.active { display: flex; }
+
+/* ================================================================
+   CARD (used by intro / instructions / rest / debrief)
+   ================================================================ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 36px 44px;
+  width: 100%; max-width: 720px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.5);
+}
+.card h1 { font-size: 2rem; font-weight: 700; margin-bottom: 4px; }
+.card h2 { font-size: 1.4rem; font-weight: 600; color: var(--accent); margin-bottom: 16px; }
+.card p  { color: var(--muted); line-height: 1.75; margin-bottom: 10px; font-size: .95rem; }
+.card ul { padding-left: 20px; color: var(--muted); line-height: 2.2; font-size: .95rem; margin-bottom: 10px; }
+.card li strong { color: var(--text); }
+hr.divider { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+
+/* ================================================================
+   BUTTONS
+   ================================================================ */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 28px;
+  background: var(--accent); color: #111111;
+  border: none; border-radius: var(--radius);
+  font-size: .95rem; font-weight: 600;
+  cursor: pointer; transition: opacity .15s, transform .1s;
+  margin-top: 18px;
+}
+.btn:hover { opacity: .85; }
+.btn:active { transform: scale(.97); }
+.btn.ghost { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+.btn:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ================================================================
+   TEXT INPUTS
+   ================================================================ */
+.field { margin-top: 14px; }
+.field label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: 6px; }
+input[type=text], textarea {
+  width: 100%; padding: 10px 14px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: .95rem;
+  font-family: inherit; outline: none; transition: border-color .15s;
+}
+input[type=text]:focus, textarea:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 80px; }
+
+/* kbd pill */
+.kbd {
+  display: inline-block; padding: 1px 6px;
+  background: var(--surface3); border: 1px solid var(--border);
+  border-radius: 4px; font-family: monospace; font-size: .8rem;
+}
+
+/* ================================================================
+   TRIAL SCREEN LAYOUT
+   ================================================================ */
+#screen-trial {
+  position: fixed; inset: 0;
+  display: none; flex-direction: column;
+  background: var(--bg);
+}
+#screen-trial.active { display: flex; }
+
+/* --- Header bar --- */
+#trial-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; height: 52px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  flex-shrink: 0; gap: 16px;
+}
+#block-label {
+  font-weight: 700; font-size: .8rem;
+  text-transform: uppercase; letter-spacing: 2px; color: var(--accent);
+  white-space: nowrap;
+}
+#trial-progress { font-size: .9rem; color: var(--muted); }
+#timer-display {
+  font-size: 1rem; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 4px 14px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  min-width: 70px; text-align: center;
+}
+#timer-display.warn { color: var(--wrong); animation: blink 1s step-start infinite; }
+@keyframes blink { 50% { opacity: .4; } }
+
+/* --- Main body (target + options) --- */
+#trial-body {
+  flex: 1; display: flex; gap: 20px;
+  padding: 16px 24px; overflow: hidden; min-height: 0;
+}
+
+/* --- Target panel --- */
+#target-panel {
+  flex: 0 0 36%; display: flex; flex-direction: column; gap: 10px;
+}
+.panel-label {
+  font-size: .75rem; text-transform: uppercase;
+  letter-spacing: 2px; color: var(--muted); flex-shrink: 0;
+}
+
+/* --- Figure container (wraps Three.js canvas) --- */
+.figure-container {
+  position: relative; flex: 1;
+  background: var(--surface);
+  border: 2px solid var(--border); border-radius: 12px;
+  overflow: hidden; user-select: none; min-height: 0;
+  transition: border-color .2s;
+}
+.figure-container canvas { display: block; width: 100% !important; height: 100% !important; }
+.figure-container.selected { border-color: var(--selected); }
+.figure-container.feedback-correct { border-color: var(--correct); }
+.figure-container.feedback-wrong   { border-color: var(--wrong); }
+
+/* Reset button overlaid on each figure */
+.reset-btn {
+  position: absolute; bottom: 8px; right: 8px;
+  padding: 4px 10px; font-size: .72rem;
+  background: rgba(0,0,0,.55); color: var(--muted);
+  border: 1px solid var(--border); border-radius: 4px;
+  cursor: pointer; backdrop-filter: blur(4px);
+  transition: color .15s, border-color .15s; z-index: 2;
+}
+.reset-btn:hover { color: var(--text); border-color: var(--muted); }
+
+/* --- Options panel --- */
+#options-panel { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+#options-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr; gap: 14px; flex: 1; min-height: 0;
+}
+.opt-wrap { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.opt-wrap .figure-container { flex: 1; cursor: default; min-height: 0; }
+
+.opt-footer {
+  display: flex; align-items: center; gap: 8px;
+  flex-shrink: 0;
+}
+.key-badge {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; font-size: .8rem; font-weight: 700;
+  transition: background .15s, border-color .15s;
+  flex-shrink: 0;
+}
+.opt-wrap.selected  .key-badge { background: var(--selected); border-color: var(--selected); color: #fff; }
+.opt-wrap.fb-correct .key-badge { background: var(--correct);  border-color: var(--correct);  color: #fff; }
+.opt-wrap.fb-wrong   .key-badge { background: var(--wrong);    border-color: var(--wrong);    color: #fff; }
+
+/* --- Footer bar --- */
+#trial-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 24px; height: 56px;
+  background: var(--surface); border-top: 1px solid var(--border);
+  flex-shrink: 0; gap: 12px;
+}
+#selection-info { font-size: .88rem; color: var(--muted); white-space: nowrap; }
+#kbd-hint       { font-size: .78rem; color: var(--muted); }
+#submit-btn {
+  padding: 9px 26px; background: var(--accent); color: #111111;
+  border: none; border-radius: var(--radius);
+  font-size: .9rem; font-weight: 700; cursor: pointer;
+  transition: opacity .15s;
+}
+#submit-btn:hover:not(:disabled) { opacity: .85; }
+#submit-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+/* --- Practice feedback banner --- */
+#feedback-banner {
+  position: fixed; bottom: 72px; left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 24px; border-radius: 8px;
+  font-weight: 700; font-size: .95rem;
+  pointer-events: none; opacity: 0;
+  transition: opacity .25s; z-index: 100;
+}
+#feedback-banner.show { opacity: 1; }
+#feedback-banner.ok  { background: var(--correct); color: #fff; }
+#feedback-banner.err { background: var(--wrong);   color: #fff; }
+
+/* Fixation cross overlay */
+.fixation-overlay {
+  position: fixed; inset: 0;
+  background: rgba(58,58,58,.92);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 52px; color: #f0f0f0; z-index: 200;
+  pointer-events: none;
+}
+
+/* Entrance animation for figure containers */
+@keyframes fadeScale {
+  from { opacity: 0; transform: scale(.9); }
+  to   { opacity: 1; transform: scale(1);  }
+}
+.entering { animation: fadeScale .3s ease-out both; }
+
+/* ================================================================
+   DEBRIEF SCREEN
+   ================================================================ */
+.score-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 12px; margin: 18px 0;
+}
+.score-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; text-align: center;
+}
+.score-card .val { font-size: 1.9rem; font-weight: 700; color: var(--accent); }
+.score-card .lbl { font-size: .75rem; color: var(--muted); margin-top: 4px; }
+.export-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+
+/* ================================================================
+   LOADING OVERLAY
+   ================================================================ */
+#loading {
+  position: fixed; inset: 0; background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; color: var(--muted); z-index: 999;
+}
+</style>
+</head>
+<body>
+
+<div id="loading">Loading Three.js…</div>
+
+<!-- ================================================================
+     SCREEN: INTRO
+     ================================================================ -->
+<div class="screen" id="screen-intro">
+  <div class="card">
+    <h1>Mental Rotation Test</h1>
+    <h2>Vandenberg &amp; Kuse (1978) — Desktop Version</h2>
+    <p>
+      In each trial you will see a <strong>3-D target object</strong> and four answer options.
+      <strong>Exactly two</strong> of the four options show the same object rotated to a different
+      orientation. The other two are <em>mirror images</em> that cannot be rotated to match.
+    </p>
+    <p>
+      You can <strong>click and drag</strong> the target object to rotate it freely in 3-D.
+      The four answer options are shown at fixed orientations.
+    </p>
+    <p>You will first complete a short <strong>practice block</strong> with feedback, then two
+       timed test blocks of 10 trials each (5 minutes per block).</p>
+    <div class="field">
+      <label for="pid">Participant ID</label>
+      <input type="text" id="pid" placeholder="e.g. P001" maxlength="60" autocomplete="off">
+    </div>
+    <button class="btn" id="intro-btn" onclick="introNext()">Continue →</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     SCREEN: INSTRUCTIONS
+     ================================================================ -->
+<div class="screen" id="screen-instructions">
+  <div class="card" style="max-width:760px">
+    <h2>Instructions</h2>
+    <p><strong>Your task:</strong> For each trial, select the <strong>two</strong> answer options
+       (out of four) that show the <em>same</em> shape as the target — just rotated. The other
+       two are mirror-flipped and will never match no matter how you rotate them.</p>
+    <ul>
+      <li><strong>Rotate the target</strong> figure by clicking and dragging on it. The four answer options are fixed and cannot be rotated.</li>
+      <li>Click <strong>↺ Reset</strong> on the target to snap it back to its starting orientation.</li>
+      <li>Press <span class="kbd">A</span> <span class="kbd">B</span> <span class="kbd">C</span> <span class="kbd">D</span> to toggle selection of each option.</li>
+      <li>Press <span class="kbd">Enter</span> or click <strong>Submit</strong> once you have selected exactly two answers.</li>
+      <li>You <strong>cannot</strong> go back to a previous trial.</li>
+    </ul>
+    <hr class="divider">
+    <p style="font-size:.9rem;color:var(--muted)">
+      You will have <strong>5 minutes</strong> for each block of 10 trials. Work as quickly
+      and as accurately as you can. The practice block has no time limit and will show you
+      whether your answers are correct.
+    </p>
+    <button class="btn" onclick="beginPractice()">Start Practice →</button>
+  </div>
+</div>
+
+<!-- ================================================================
+     SCREEN: TRIAL (shared for practice + test blocks)
+     ================================================================ -->
+<div id="screen-trial">
+  <div id="trial-header">
+    <span id="block-label">Practice</span>
+    <span id="trial-progress">Trial 1 of 4</span>
+    <span id="timer-display">—</span>
+  </div>
+
+  <div id="trial-body">
+    <!-- Target figure (left, large) -->
+    <div id="target-panel">
+      <span class="panel-label">Target Object</span>
+      <div class="figure-container" id="tc">
+      </div>
+    </div>
+
+    <!-- Answer options (right, 2×2 grid) -->
+    <div id="options-panel">
+      <span class="panel-label">Select the two that match the target</span>
+      <div id="options-grid">
+        <!-- Option A -->
+        <div class="opt-wrap" id="ow-0">
+          <div class="figure-container" id="oc-0" onclick="handleOptClick(0,event)">
+          </div>
+          <div class="opt-footer">
+            <span class="key-badge" id="kb-0">A</span>
+          </div>
+        </div>
+        <!-- Option B -->
+        <div class="opt-wrap" id="ow-1">
+          <div class="figure-container" id="oc-1" onclick="handleOptClick(1,event)">
+          </div>
+          <div class="opt-footer">
+            <span class="key-badge" id="kb-1">B</span>
+          </div>
+        </div>
+        <!-- Option C -->
+        <div class="opt-wrap" id="ow-2">
+          <div class="figure-container" id="oc-2" onclick="handleOptClick(2,event)">
+          </div>
+          <div class="opt-footer">
+            <span class="key-badge" id="kb-2">C</span>
+          </div>
+        </div>
+        <!-- Option D -->
+        <div class="opt-wrap" id="ow-3">
+          <div class="figure-container" id="oc-3" onclick="handleOptClick(3,event)">
+          </div>
+          <div class="opt-footer">
+            <span class="key-badge" id="kb-3">D</span>
+          </div>
+        </div>
+      </div><!-- #options-grid -->
+    </div><!-- #options-panel -->
+  </div><!-- #trial-body -->
+
+  <div id="trial-footer">
+    <span id="selection-info">Select 2 answers (0 selected)</span>
+    <span id="kbd-hint">
+      <span class="kbd">A</span>–<span class="kbd">D</span> select &nbsp;·&nbsp;
+      <span class="kbd">Enter</span> submit
+    </span>
+    <button id="submit-btn" disabled onclick="submitTrial()">Submit</button>
+  </div>
+</div><!-- #screen-trial -->
+
+<div id="feedback-banner"></div>
+
+<!-- ================================================================
+     SCREEN: DEBRIEF
+     ================================================================ -->
+<div class="screen" id="screen-debrief">
+  <div class="card" style="max-width:760px">
+    <h2>Test Complete — Thank You</h2>
+    <div class="score-grid" id="score-grid"></div>
+    <hr class="divider">
+    <div class="field">
+      <label for="strategy">Strategy question: briefly describe how you approached the task</label>
+      <textarea id="strategy" rows="3" placeholder="e.g. I tried to mentally rotate the whole figure at once…"></textarea>
+    </div>
+    <div class="export-row">
+      <button class="btn"       onclick="exportJSON()">⬇ Download JSON (full log)</button>
+      <button class="btn ghost" onclick="exportCSV()">⬇ Download CSV (trial data)</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================================================================
+     JAVASCRIPT
+     ================================================================ -->
+<script>
+'use strict';
+
+/* ================================================================
+   RESEARCHER CONFIGURATION
+   Edit these values before running the experiment.
+   ================================================================ */
+const CONFIG = {
+  SEED:                  42,    // integer seed — change to get a different reproducible trial sequence
+  TRIALS_PER_BLOCK:      10,    // trials in each test block (A and B)
+  TIME_LIMIT_SECONDS:    300,   // seconds per test block (default 300 = 5 min)
+  REST_SECONDS:          60,    // rest break duration between blocks
+  PRACTICE_ENABLED:      true,  // false = skip practice, go straight to Block A
+  PRACTICE_TRIALS:       4,     // number of practice trials
+  ROTATION_ENABLED:      false, // classic static MRT — no rotation interaction
+  FIXATION_CROSS:        true,  // show a fixation cross between trials
+  FIXATION_MS:           500,   // fixation cross duration in ms
+  PARTICIPANT_ID_PROMPT: true,  // false = skip participant ID entry
+};
+
+/* ================================================================
+   SHEPARD-METZLER FIGURE DEFINITIONS
+   Each figure is an ordered list of 10 [x,y,z] cube positions.
+   Adjacent cubes in the list share exactly one face (connected chain).
+   Figures are hand-crafted to be:
+     • 3-dimensional (spans all three axes)
+     • Asymmetric / chiral (cannot be superimposed on their mirror image by rotation)
+     • Visually distinct from one another
+   Mirror images are generated programmatically (negate X) for "wrong" options.
+
+   To add more figures, append additional arrays here following the same format.
+   ================================================================ */
+const BASE_FIGURES = [
+  // F0 — Z-fold: right, turn up, extend forward
+  [[0,0,0],[1,0,0],[2,0,0],[2,1,0],[2,2,0],[2,2,1],[2,2,2],[3,2,2],[4,2,2],[4,3,2]],
+  // F1 — S-curve: up, turn right, turn back, drop down, exit right
+  [[0,0,0],[0,1,0],[0,2,0],[1,2,0],[2,2,0],[2,2,1],[2,2,2],[2,1,2],[2,0,2],[3,0,2]],
+  // F2 — Right-angle arm: long right run, turn up, turn into page
+  [[0,0,0],[1,0,0],[2,0,0],[3,0,0],[3,1,0],[3,2,0],[3,2,1],[3,2,2],[3,2,3],[2,2,3]],
+  // F3 — Staircase into depth: forward run, turn up, turn right
+  [[0,0,0],[0,0,1],[0,0,2],[0,1,2],[0,2,2],[1,2,2],[2,2,2],[2,2,1],[2,2,0],[2,3,0]],
+  // F4 — Tall spiral: up run, turn deep, turn left, continue up
+  [[0,0,0],[1,0,0],[1,1,0],[1,2,0],[1,3,0],[1,3,1],[1,3,2],[0,3,2],[0,3,3],[0,3,4]],
+  // F5 — Cross-axis wrap: forward, turn right, turn up, backtrack in Z
+  [[0,0,0],[0,0,1],[0,0,2],[0,0,3],[1,0,3],[2,0,3],[2,1,3],[2,2,3],[2,2,2],[2,2,1]],
+  // F6 — Double-bend: right, dive into page, climb up, retreat left
+  [[0,0,0],[1,0,0],[2,0,0],[2,0,1],[2,0,2],[2,1,2],[2,2,2],[1,2,2],[0,2,2],[0,2,3]],
+  // F7 — Long arm: up, extend into page, continue right
+  [[0,0,0],[0,1,0],[0,2,0],[0,2,1],[0,2,2],[1,2,2],[2,2,2],[2,2,3],[2,2,4],[3,2,4]],
+  // F8 — Zigzag through 3 axes
+  [[0,0,0],[1,0,0],[1,0,1],[1,0,2],[1,1,2],[1,2,2],[1,2,3],[1,2,4],[2,2,4],[3,2,4]],
+  // F9 — Spiral-step: deep, turn right, climb, turn back
+  [[0,0,0],[0,0,1],[0,0,2],[1,0,2],[2,0,2],[2,1,2],[2,2,2],[2,3,2],[2,3,1],[2,3,0]],
+  // F10 — Reversed C with depth
+  [[0,0,0],[0,1,0],[0,2,0],[0,3,0],[1,3,0],[2,3,0],[2,3,1],[2,3,2],[1,3,2],[0,3,2]],
+  // F11 — Diagonal ladder
+  [[0,0,0],[1,0,0],[1,1,0],[1,1,1],[1,1,2],[2,1,2],[3,1,2],[3,2,2],[3,3,2],[3,3,1]],
+];
+
+/* ================================================================
+   SESSION STATE
+   ================================================================ */
+const session = {
+  participantId:  '',
+  startTime:      null,
+  currentBlock:   'practice',   // 'practice' | 'A' | 'B'
+  trialIndex:     0,
+  practiceTrials: [],
+  blockATrials:   [],
+  blockBTrials:   [],
+  allTrials:      [],           // flat list of all recorded responses
+  trialStartMs:   0,
+  timerIv:        null,
+  restIv:         null,
+};
+
+/* ================================================================
+   THREE.JS FIGURE RENDERERS
+   figureRenderers[0]   = target
+   figureRenderers[1-4] = options A-D
+   ================================================================ */
+let figureRenderers = [];
+let rafId = null;
+
+/* current trial object */
+let trial = null;
+
+/* ================================================================
+   SEEDED PRNG — Mulberry32
+   Returns a closure that produces floats in [0, 1) from a 32-bit seed.
+   All randomness in this file is routed through `rng()` so that the
+   same CONFIG.SEED always produces identical trial sequences.
+   ================================================================ */
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+// Module-level RNG instance — seeded (and reset) inside generateTrials()
+let rng = mulberry32(0);
+
+/* ================================================================
+   UTILITY: uniform random quaternion (Shoemake 1992)
+   Produces a uniformly distributed rotation in SO(3).
+   ================================================================ */
+function randomQuat() {
+  const u1 = rng(), u2 = rng(), u3 = rng();
+  return new THREE.Quaternion(
+    Math.sqrt(1-u1) * Math.sin(2*Math.PI*u2),
+    Math.sqrt(1-u1) * Math.cos(2*Math.PI*u2),
+    Math.sqrt(u1)   * Math.sin(2*Math.PI*u3),
+    Math.sqrt(u1)   * Math.cos(2*Math.PI*u3)
+  ).normalize();
+}
+
+/* Fisher-Yates shuffle (in-place) — uses seeded rng() */
+function shuffle(arr) {
+  for (let i = arr.length-1; i > 0; i--) {
+    const j = Math.floor(rng()*(i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/* ================================================================
+   CLASS: FigureRenderer
+   Encapsulates one Three.js scene / camera / renderer for one panel.
+   Implements Shoemake "virtual trackball" drag-rotation.
+
+   VR PORT NOTE:
+     The rotation state lives in `this.currentQuat` (a THREE.Quaternion).
+     The figure geometry lives in `this.figGroup` (a THREE.Group).
+     To port to WebXR:
+       1. Replace WebGLRenderer with XRSystem renderer.
+       2. Map controller squeeze/grip to `_onDragStart/_onDragMove` equivalents
+          using the controller ray or wrist pose instead of mouse screen coords.
+       3. `_trackballVec` maps 2-D screen pos → 3-D sphere; replace with
+          direct 3-D controller position projected onto a virtual sphere
+          centred on the figure group's world position.
+   ================================================================ */
+class FigureRenderer {
+  /**
+   * @param {HTMLElement} container  The .figure-container div to attach to.
+   * @param {boolean}     interactive  Enable drag-rotation (respects CONFIG).
+   */
+  constructor(container, interactive = true) {
+    this.container   = container;
+    this.interactive = interactive && CONFIG.ROTATION_ENABLED;
+    this.isDragging  = false;
+    this.prevVec     = null;            // previous trackball vector
+    this.currentQuat = new THREE.Quaternion();
+    this.initQuat    = new THREE.Quaternion(); // original orientation for reset
+
+    // --- Tween state for animated reset ---
+    this.tweening    = false;
+    this.tweenFrom   = new THREE.Quaternion();
+    this.tweenTo     = new THREE.Quaternion();
+    this.tweenStart  = 0;
+    this.tweenMs     = 420;             // tween duration in ms
+
+    // --- Three.js scene ---
+    this.scene    = new THREE.Scene();
+    this.camera   = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
+    this.camera.position.set(3.5, 3.5, 8);
+    this.camera.lookAt(0, 0, 0);
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setClearColor(0x484848, 1); // matches --surface (dark grey)
+    // Insert canvas before the reset button
+    container.insertBefore(this.renderer.domElement, container.firstChild);
+
+    // Figure group (all cube meshes are children)
+    this.figGroup = new THREE.Group();
+    this.scene.add(this.figGroup);
+
+    // --- Lighting: neutral two-light rig (no colour tint) ---
+    // Ambient: prevents fully black shadow faces
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    // Key light: bright, upper-right-front — gives face-to-face shading for depth
+    const key = new THREE.DirectionalLight(0xffffff, 0.85);
+    key.position.set(5, 8, 6);
+    this.scene.add(key);
+
+    // White solid cube geometry (slightly smaller — the gap becomes the outline)
+    this._solidGeo   = new THREE.BoxGeometry(0.88, 0.88, 0.88);
+    // Lambert = diffuse only, no specular / no reflections
+    this._solidMat   = new THREE.MeshLambertMaterial({ color: 0xffffff });
+
+    // Black outline: same-unit cube rendered with BackSide only.
+    // The back faces of a larger cube poke out just past the solid cube edges,
+    // forming a crisp black border with no extra geometry tricks needed.
+    this._outlineGeo = new THREE.BoxGeometry(1.0, 1.0, 1.0);
+    this._outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
+
+    if (this.interactive) this._initInteraction();
+
+    this._ro = new ResizeObserver(() => this._resize());
+    this._ro.observe(container);
+    this._resize();
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Build / rebuild the figure geometry from cube positions.
+
+     @param {Array}           positions  Array of 10 [x,y,z] arrays.
+     @param {boolean}         mirrored   If true, reflect positions across X.
+     @param {THREE.Quaternion} quat      Initial rotation quaternion.
+  ────────────────────────────────────────────────────────────── */
+  setFigure(positions, mirrored, quat) {
+    // Clear previous meshes (geometry/material are reused, not disposed here)
+    while (this.figGroup.children.length) {
+      this.figGroup.remove(this.figGroup.children[0]);
+    }
+
+    // Mirror positions by negating X — gives a structurally correct mirror
+    // image with correct lighting (no negative-scale normal inversion issues)
+    const pts = mirrored
+      ? positions.map(([x,y,z]) => [-x, y, z])
+      : positions.map(([x,y,z]) => [ x, y, z]);
+
+    // Compute centroid to centre the figure at the origin
+    let cx = 0, cy = 0, cz = 0;
+    for (const [x,y,z] of pts) { cx += x; cy += y; cz += z; }
+    cx /= pts.length; cy /= pts.length; cz /= pts.length;
+
+    for (const [x,y,z] of pts) {
+      // Solid white cube
+      const solid = new THREE.Mesh(this._solidGeo, this._solidMat);
+      solid.position.set(x - cx, y - cy, z - cz);
+      this.figGroup.add(solid);
+      // Black outline: backface-only render of a unit cube surrounding the solid
+      const outline = new THREE.Mesh(this._outlineGeo, this._outlineMat);
+      outline.position.set(x - cx, y - cy, z - cz);
+      this.figGroup.add(outline);
+    }
+
+    // Store and apply initial quaternion
+    this.initQuat.copy(quat || new THREE.Quaternion());
+    this.currentQuat.copy(this.initQuat);
+    this.figGroup.quaternion.copy(this.currentQuat);
+    this.tweening = false;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Smoothly tween the figure back to its initial orientation.
+  ────────────────────────────────────────────────────────────── */
+  resetRotation() {
+    this.tweenFrom.copy(this.currentQuat);
+    this.tweenTo.copy(this.initQuat);
+    this.tweenStart = performance.now();
+    this.tweening   = true;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     Per-frame update: advance tween, render scene.
+     Called by the global RAF loop.
+  ────────────────────────────────────────────────────────────── */
+  render(ts) {
+    if (this.tweening) {
+      const t = Math.min((ts - this.tweenStart) / this.tweenMs, 1);
+      // Ease in-out cubic
+      const e = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2,3)/2;
+      // slerp: copy from→to at fraction e, store in currentQuat
+      this.currentQuat.copy(this.tweenFrom).slerp(this.tweenTo, e);
+      this.figGroup.quaternion.copy(this.currentQuat);
+      if (t >= 1) this.tweening = false;
+    }
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     TRACKBALL ROTATION
+     Maps mouse/touch screen-space delta onto a virtual unit sphere
+     (Shoemake 1992). Rotation axis = cross(prevVec, currVec);
+     rotation angle = angle between them.
+
+     VR PORT: replace `_trackballVec(screenX, screenY)` with a
+     function that maps a 3-D controller ray intersection with a
+     virtual sphere surrounding the figure.
+  ────────────────────────────────────────────────────────────── */
+  _initInteraction() {
+    const el = this.renderer.domElement;
+    el.style.cursor = 'grab';
+
+    el.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('reset-btn')) return;
+      e.preventDefault();
+      this.isDragging = true;
+      this.prevVec = this._trackballVec(e.clientX, e.clientY);
+      el.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!this.isDragging) return;
+      this._applyDelta(this._trackballVec(e.clientX, e.clientY));
+    });
+
+    const stopDrag = () => {
+      if (!this.isDragging) return;
+      this.isDragging = false;
+      el.style.cursor = 'grab';
+    };
+    window.addEventListener('mouseup', stopDrag);
+
+    // Touch support
+    el.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      if (e.touches.length === 1) {
+        this.isDragging = true;
+        this.prevVec = this._trackballVec(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: false });
+
+    el.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      if (this.isDragging && e.touches.length === 1) {
+        this._applyDelta(this._trackballVec(e.touches[0].clientX, e.touches[0].clientY));
+      }
+    }, { passive: false });
+
+    el.addEventListener('touchend', () => { this.isDragging = false; });
+  }
+
+  /* Apply incremental trackball rotation from prevVec → currVec */
+  _applyDelta(currVec) {
+    if (!this.prevVec) { this.prevVec = currVec; return; }
+    const axis  = new THREE.Vector3().crossVectors(this.prevVec, currVec);
+    const angle = this.prevVec.angleTo(currVec);
+    if (axis.length() > 1e-5 && angle > 1e-4) {
+      axis.normalize();
+      // premultiply = rotate in world space (trackball feel, no gimbal lock)
+      const dq = new THREE.Quaternion().setFromAxisAngle(axis, angle * 2.2);
+      this.currentQuat.premultiply(dq);
+      this.figGroup.quaternion.copy(this.currentQuat);
+    }
+    this.prevVec = currVec;
+  }
+
+  /* Map screen pixel (x,y) → point on virtual unit sphere.
+     Points outside the sphere project onto the rim (Shoemake method). */
+  _trackballVec(sx, sy) {
+    const r = this.renderer.domElement.getBoundingClientRect();
+    const x =  (2*(sx - r.left) / r.width)  - 1;
+    const y = -(2*(sy - r.top)  / r.height) + 1;
+    const d = x*x + y*y;
+    if (d <= 1) return new THREE.Vector3(x, y, Math.sqrt(1 - d)).normalize();
+    const l = Math.sqrt(d);
+    return new THREE.Vector3(x/l, y/l, 0).normalize();
+  }
+
+  _resize() {
+    const w = this.container.clientWidth, h = this.container.clientHeight;
+    if (!w || !h) return;
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+  }
+
+  dispose() {
+    this._ro.disconnect();
+    this._solidGeo.dispose();   this._solidMat.dispose();
+    this._outlineGeo.dispose(); this._outlineMat.dispose();
+    this.renderer.dispose();
+    if (this.renderer.domElement.parentNode)
+      this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+  }
+}
+
+/* ================================================================
+   TRIAL GENERATION
+   ================================================================ */
+
+/**
+ * Generate one trial descriptor.
+ *
+ * @param {number}  figIdx      Index into BASE_FIGURES
+ * @param {boolean} isPractice
+ * @param {number}  num         1-based trial number within its block
+ * @param {string}  block       'practice' | 'A' | 'B'
+ * @returns {Object}
+ */
+function makeTrial(figIdx, isPractice, num, block) {
+  // Assign which two of four options are "correct" (same shape, rotated)
+  // and which two are "wrong" (mirror image, rotated).
+  // Shuffle slot positions so the correct options aren't always in the same spots.
+  const slots = shuffle([0,1,2,3]);
+  const correctSlots = [slots[0], slots[1]];
+  const wrongSlots   = [slots[2], slots[3]];
+
+  // Generate 4 random initial quaternions for the options
+  const optQuats = [randomQuat(), randomQuat(), randomQuat(), randomQuat()];
+
+  return {
+    figIdx,
+    positions:     BASE_FIGURES[figIdx],
+    targetQuat:    randomQuat(),
+    options: optQuats.map((q, i) => ({
+      quat:     q,
+      mirrored: wrongSlots.includes(i),
+    })),
+    correctSlots,          // which option indices [0-3] are correct
+    selectedSlots: [],     // filled in by the participant
+    responseMs:   null,
+    correct:      null,
+    isPractice,
+    trialNum:     num,
+    block,
+  };
+}
+
+/** Pre-generate all trials for the session. */
+function generateTrials() {
+  // Reset the PRNG to CONFIG.SEED so every page load produces the same sequence
+  rng = mulberry32(CONFIG.SEED);
+  // Use a shuffled pool of figure indices for variety
+  const pool = shuffle([...Array.from({length: BASE_FIGURES.length}, (_,i) => i)]);
+  let p = 0;
+  const pick = () => { const v = pool[p % pool.length]; p++; return v; };
+
+  if (CONFIG.PRACTICE_ENABLED) {
+    for (let i = 0; i < CONFIG.PRACTICE_TRIALS; i++)
+      session.practiceTrials.push(makeTrial(pick(), true,  i+1, 'practice'));
+  }
+  for (let i = 0; i < CONFIG.TRIALS_PER_BLOCK; i++)
+    session.blockATrials.push(makeTrial(pick(), false, i+1, 'A'));
+}
+
+/* ================================================================
+   RENDERERS — created once at startup, reused for every trial
+   ================================================================ */
+function initRenderers() {
+  figureRenderers.forEach(r => r.dispose());
+  figureRenderers = [
+    new FigureRenderer(document.getElementById('tc'),    true),  // target — rotatable
+    new FigureRenderer(document.getElementById('oc-0'), false),  // option A — fixed
+    new FigureRenderer(document.getElementById('oc-1'), false),  // option B — fixed
+    new FigureRenderer(document.getElementById('oc-2'), false),  // option C — fixed
+    new FigureRenderer(document.getElementById('oc-3'), false),  // option D — fixed
+  ];
+}
+
+/* ================================================================
+   RENDER LOOP
+   ================================================================ */
+function startRAF() {
+  if (rafId) return;
+  const loop = (ts) => {
+    figureRenderers.forEach(r => r.render(ts));
+    rafId = requestAnimationFrame(loop);
+  };
+  rafId = requestAnimationFrame(loop);
+}
+function stopRAF() {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+}
+
+/* ================================================================
+   SCREEN MANAGEMENT
+   ================================================================ */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-trial').classList.remove('active');
+
+  if (id === 'screen-trial') {
+    document.getElementById('screen-trial').classList.add('active');
+  } else {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('active');
+  }
+}
+
+/* ================================================================
+   INTRO
+   ================================================================ */
+function introNext() {
+  const pid = document.getElementById('pid');
+  if (CONFIG.PARTICIPANT_ID_PROMPT && !pid.value.trim()) {
+    pid.style.borderColor = 'var(--wrong)';
+    pid.focus();
+    return;
+  }
+  session.participantId = pid.value.trim() || 'anonymous';
+  session.startTime     = new Date().toISOString();
+  generateTrials();
+  showScreen('screen-instructions');
+}
+
+/* ================================================================
+   PRACTICE BLOCK
+   ================================================================ */
+function beginPractice() {
+  if (!CONFIG.PRACTICE_ENABLED) { beginBlock('A'); return; }
+  session.currentBlock = 'practice';
+  session.trialIndex   = 0;
+  showScreen('screen-trial');
+  startRAF();
+  loadTrial(currentTrials()[0]);
+  document.getElementById('timer-display').textContent = 'Practice';
+}
+
+/* ================================================================
+   TEST BLOCKS
+   ================================================================ */
+function beginBlock(block) {
+  session.currentBlock = block;
+  session.trialIndex   = 0;
+  showScreen('screen-trial');
+  startRAF();
+  loadTrial(currentTrials()[0]);
+  startTimer(CONFIG.TIME_LIMIT_SECONDS);
+}
+
+function currentTrials() {
+  if (session.currentBlock === 'practice') return session.practiceTrials;
+  if (session.currentBlock === 'A')        return session.blockATrials;
+  return session.blockBTrials;
+}
+
+/* ================================================================
+   TIMER
+   ================================================================ */
+function startTimer(sec) {
+  clearInterval(session.timerIv);
+  let rem = sec;
+  const el = document.getElementById('timer-display');
+  el.classList.remove('warn');
+  updateTimerEl(el, rem);
+  session.timerIv = setInterval(() => {
+    rem--;
+    updateTimerEl(el, rem);
+    if (rem <= 30) el.classList.add('warn');
+    if (rem <= 0) { clearInterval(session.timerIv); timeUp(); }
+  }, 1000);
+}
+function updateTimerEl(el, sec) {
+  const m = String(Math.floor(sec/60)).padStart(2,'0');
+  const s = String(sec % 60).padStart(2,'0');
+  el.textContent = `${m}:${s}`;
+}
+function timeUp() { advanceTrial(true); }
+
+/* ================================================================
+   LOAD A TRIAL
+   ================================================================ */
+function loadTrial(t) {
+  trial = t;
+  trial.selectedSlots = [];
+  session.trialStartMs = performance.now();
+
+  // Header
+  const blockName = { practice: 'Practice', A: 'Block A' }[session.currentBlock];
+  document.getElementById('block-label').textContent   = blockName;
+  document.getElementById('trial-progress').textContent =
+    `Trial ${t.trialNum} of ${currentTrials().length}`;
+
+  // Clear selection UI
+  for (let i = 0; i < 4; i++) {
+    const ow = document.getElementById(`ow-${i}`);
+    const oc = document.getElementById(`oc-${i}`);
+    ow.className = 'opt-wrap';
+    oc.className = 'figure-container';
+  }
+  updateFooter();
+  document.getElementById('submit-btn').disabled = true;
+  hideFeedback();
+
+  // Entrance animation
+  const all = ['tc','oc-0','oc-1','oc-2','oc-3'];
+  all.forEach(id => {
+    const el = document.getElementById(id);
+    el.classList.remove('entering');
+    void el.offsetWidth;
+    el.classList.add('entering');
+  });
+
+  // Push figure data to renderers
+  figureRenderers[0].setFigure(t.positions, false, t.targetQuat);
+  for (let i = 0; i < 4; i++) {
+    const opt = t.options[i];
+    figureRenderers[i+1].setFigure(t.positions, opt.mirrored, opt.quat);
+  }
+}
+
+/* ================================================================
+   OPTION SELECTION
+   ================================================================ */
+function handleOptClick(idx, e) {
+  // Ignore clicks on the reset button
+  if (e.target.classList.contains('reset-btn')) return;
+  toggleOpt(idx);
+}
+function toggleOpt(idx) {
+  if (!trial) return;
+  const sel = trial.selectedSlots;
+  const pos = sel.indexOf(idx);
+  if (pos >= 0) {
+    sel.splice(pos, 1);
+  } else {
+    if (sel.length < 2) sel.push(idx);
+  }
+  // Sync UI
+  for (let i = 0; i < 4; i++) {
+    const ow = document.getElementById(`ow-${i}`);
+    const oc = document.getElementById(`oc-${i}`);
+    ow.classList.toggle('selected', sel.includes(i));
+    oc.classList.toggle('selected', sel.includes(i));
+  }
+  updateFooter();
+  document.getElementById('submit-btn').disabled = sel.length !== 2;
+}
+function updateFooter() {
+  const n = trial ? trial.selectedSlots.length : 0;
+  document.getElementById('selection-info').textContent =
+    `Select 2 answers (${n} selected)`;
+}
+
+/* ================================================================
+   SUBMIT
+   ================================================================ */
+function submitTrial() {
+  if (!trial || trial.selectedSlots.length !== 2) return;
+
+  trial.responseMs = Math.round(performance.now() - session.trialStartMs);
+
+  const sel = [...trial.selectedSlots].sort((a,b)=>a-b);
+  const cor = [...trial.correctSlots ].sort((a,b)=>a-b);
+  trial.correct = (sel[0] === cor[0] && sel[1] === cor[1]);
+
+  // Record in flat log
+  session.allTrials.push({...trial});
+
+  if (trial.isPractice) {
+    // Show per-option feedback
+    for (let i = 0; i < 4; i++) {
+      const isCorrectOpt = trial.correctSlots.includes(i);
+      const wasSelected  = trial.selectedSlots.includes(i);
+      const ow = document.getElementById(`ow-${i}`);
+      const oc = document.getElementById(`oc-${i}`);
+      ow.classList.remove('selected');
+      oc.classList.remove('selected');
+      if (isCorrectOpt)       { ow.classList.add('fb-correct'); oc.classList.add('feedback-correct'); }
+      else if (wasSelected)   { ow.classList.add('fb-wrong');   oc.classList.add('feedback-wrong');   }
+    }
+    showFeedback(trial.correct);
+    setTimeout(() => { hideFeedback(); advanceTrial(false); }, 1600);
+  } else {
+    advanceTrial(false);
+  }
+}
+
+function showFeedback(ok) {
+  const el = document.getElementById('feedback-banner');
+  el.textContent = ok
+    ? '✓ Correct!'
+    : '✗ Incorrect — the two correct options are highlighted in green';
+  el.className = `show ${ok ? 'ok' : 'err'}`;
+}
+function hideFeedback() {
+  document.getElementById('feedback-banner').className = '';
+}
+
+/* ================================================================
+   ADVANCE / END BLOCK
+   ================================================================ */
+function advanceTrial(timedOut) {
+  session.trialIndex++;
+  const trials = currentTrials();
+  if (session.trialIndex >= trials.length || timedOut) {
+    endBlock();
+    return;
+  }
+  const next = trials[session.trialIndex];
+  if (CONFIG.FIXATION_CROSS) {
+    showFixation(() => loadTrial(next));
+  } else {
+    loadTrial(next);
+  }
+}
+
+function showFixation(cb) {
+  const d = document.createElement('div');
+  d.className = 'fixation-overlay';
+  d.textContent = '+';
+  document.body.appendChild(d);
+  setTimeout(() => { document.body.removeChild(d); cb(); }, CONFIG.FIXATION_MS);
+}
+
+function endBlock() {
+  clearInterval(session.timerIv);
+  document.getElementById('timer-display').classList.remove('warn');
+
+  if (session.currentBlock === 'practice') {
+    beginBlock('A');
+  } else {
+    // Block A complete — go directly to debrief (no Block B)
+    stopRAF();
+    showDebrief();
+  }
+}
+
+/* ================================================================
+   RESET FIGURE ROTATION
+   ================================================================ */
+function resetFig(idx) {
+  if (figureRenderers[idx]) figureRenderers[idx].resetRotation();
+}
+
+/* ================================================================
+   KEYBOARD SHORTCUTS
+   ================================================================ */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  // Only active on trial screen
+  const trialActive = document.getElementById('screen-trial').classList.contains('active');
+
+  if (trialActive) {
+    const map = { a:0, b:1, c:2, d:3, A:0, B:1, C:2, D:3 };
+    if (e.key in map) { toggleOpt(map[e.key]); return; }
+    if (e.key === 'Enter') {
+      const btn = document.getElementById('submit-btn');
+      if (!btn.disabled) submitTrial();
+    }
+  }
+});
+
+/* ================================================================
+   DEBRIEF & SCORING
+   ================================================================ */
+function showDebrief() {
+  const aTrials = session.allTrials.filter(t => t.block === 'A');
+  const score   = aTrials.filter(t => t.correct).length;
+  const rts     = aTrials.filter(t => t.responseMs).map(t => t.responseMs);
+  const meanRT  = rts.length ? Math.round(rts.reduce((s,v)=>s+v,0) / rts.length) : 0;
+  const medRT   = rts.length ? computeMedian(rts) : 0;
+
+  document.getElementById('score-grid').innerHTML = `
+    <div class="score-card"><div class="val">${score}/${CONFIG.TRIALS_PER_BLOCK}</div><div class="lbl">Score</div></div>
+    <div class="score-card"><div class="val">${aTrials.length}/${CONFIG.TRIALS_PER_BLOCK}</div><div class="lbl">Trials Completed</div></div>
+    <div class="score-card"><div class="val">${(meanRT/1000).toFixed(1)}s</div><div class="lbl">Mean RT</div></div>
+    <div class="score-card"><div class="val">${(medRT/1000).toFixed(1)}s</div><div class="lbl">Median RT</div></div>
+  `;
+  showScreen('screen-debrief');
+}
+
+function computeMedian(arr) {
+  const s = [...arr].sort((a,b)=>a-b);
+  const m = Math.floor(s.length/2);
+  return s.length % 2 ? s[m] : (s[m-1]+s[m])/2;
+}
+
+/* ================================================================
+   DATA EXPORT
+
+   JSON schema is designed to be mergeable with a VR condition log
+   from the same participant (match on participant_id + trial_number
+   + block). The `condition` field ('desktop' here) distinguishes
+   the two datasets.
+   ================================================================ */
+function buildLog() {
+  const aTrials = session.allTrials.filter(t => t.block === 'A');
+  return {
+    schema_version:   '1.0',
+    condition:        'desktop',
+    participant_id:   session.participantId,
+    session_start:    session.startTime,
+    session_end:      new Date().toISOString(),
+    config:           { ...CONFIG },
+    scores: {
+      block_A:      aTrials.filter(t=>t.correct).length,
+      total:        aTrials.filter(t=>t.correct).length,
+      max_possible: CONFIG.TRIALS_PER_BLOCK,
+    },
+    reaction_times: {
+      mean_ms:   Math.round(
+        session.allTrials.filter(t=>!t.isPractice && t.responseMs)
+          .reduce((s,t,_,a) => s + t.responseMs/a.length, 0)),
+      median_ms: computeMedian(
+        session.allTrials.filter(t=>!t.isPractice && t.responseMs).map(t=>t.responseMs)),
+    },
+    strategy_response: document.getElementById('strategy').value,
+    trials: session.allTrials.map(t => ({
+      block:                 t.block,
+      trial_number:          t.trialNum,
+      figure_id:             t.figIdx,
+      correct_option_slots:  t.correctSlots,
+      selected_option_slots: t.selectedSlots,
+      options_mirrored:      t.options.map(o => o.mirrored),
+      response_time_ms:      t.responseMs,
+      is_correct:            t.correct,
+      is_practice:           t.isPractice,
+    })),
+  };
+}
+
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(buildLog(), null, 2)], { type: 'application/json' });
+  dl(blob, `mrt_${session.participantId}_${ts()}.json`);
+}
+
+function exportCSV() {
+  const hdr = ['block','trial_number','figure_id','correct_slots','selected_slots',
+                'response_time_ms','is_correct','opt0_mirror','opt1_mirror','opt2_mirror','opt3_mirror'];
+  const rows = session.allTrials
+    .filter(t => !t.isPractice)
+    .map(t => [
+      t.block, t.trialNum, t.figIdx,
+      `"${t.correctSlots.join(';')}"`, `"${t.selectedSlots.join(';')}"`,
+      t.responseMs, t.correct ? 1 : 0,
+      ...t.options.map(o => o.mirrored ? 1 : 0),
+    ]);
+  const csv = [hdr, ...rows].map(r => r.join(',')).join('\n');
+  dl(new Blob([csv], {type:'text/csv'}), `mrt_${session.participantId}_${ts()}.csv`);
+}
+
+function dl(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 150);
+}
+function ts() { return new Date().toISOString().replace(/[:.]/g,'-').slice(0,19); }
+
+/* ================================================================
+   INIT
+   ================================================================ */
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    document.getElementById('loading').style.display = 'none';
+    initRenderers();   // create Three.js renderers once for all trials
+    if (CONFIG.PARTICIPANT_ID_PROMPT) {
+      showScreen('screen-intro');
+    } else {
+      session.participantId = 'anonymous';
+      session.startTime     = new Date().toISOString();
+      generateTrials();
+      showScreen('screen-instructions');
+    }
+  }, 200);
+});
+</script>
+</body>
+</html>
